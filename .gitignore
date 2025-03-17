@@ -1,0 +1,40 @@
+# === Node.js ===
+node_modules/
+.env
+.env.*
+.env.local
+.env.*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# === Python (TunBERT microservice) ===
+__pycache__/
+*.pyc
+venv/
+*.log
+*.tmp
+*.pkl
+*.h5
+*.ckpt
+
+# === React Native / Expo ===
+.expo/
+.expo-shared/
+android/
+ios/
+*.apk
+*.keystore
+web-build/
+*.DS_Store
+dist/
+build/
+.idea/
+*.iml
+
+# === VSCode ===
+.vscode/
+
+# === Mac OS ===
+.DS_Store
