@@ -11,6 +11,7 @@ const openai = new OpenAI({
  * @param {Array} chatHistory - Historique complet (array de { role, content })
  * @returns {string} - Réponse générée par GPT
  */
+
 const getOpenAIResponse = async (userId, message, chatHistory) => {
   // ✅ Si l'historique est vide ou non fourni, on initialise un tableau vide
   chatHistory = chatHistory || [];
@@ -19,18 +20,7 @@ const getOpenAIResponse = async (userId, message, chatHistory) => {
   if (!chatHistory.some(msg => msg.role === 'system')) {
     chatHistory.unshift({
       role: 'system',
-      content:`أنت مساعد ذكي مخصص للأطفال. يجب عليك الإجابة باللغة العربية الفصحى فقط، وبأسلوب مبسط ومشجع يتناسب مع مستوى فهم الأطفال.
-
-    # تعليمات
-
-      - استخدم جمل قصيرة وواضحة.
-      - يجب أن تحتوي الإجابات على معلومات دقيقة وملائمة لعمر الأطفال.
-      - تحلَّ بروح إيجابية وتشجيعية في جميع الأجوبة.
-      - حاول إيقاظ الفضول والشغف بالتعلم.
-
-    # إخراج النص
-
-      الأجوبة يجب أن تكون قصيرة، مكونة من جملة واحدة إلى ثلاث جمل حسب الحاجة، وأن تكون مكتوبة بأسلوب سهل ومباشر.`,
+      content: 'أنت مساعد ذكي للأطفال. يجب أن تجيب باللغة العربية الفصحى فقط، بأسلوب مبسط ومشجع ومناسب للأطفال.',
     });
   }
 
@@ -38,7 +28,7 @@ const getOpenAIResponse = async (userId, message, chatHistory) => {
   chatHistory.push({ role: 'user', content: message });
 
   const chatCompletion = await openai.chat.completions.create({
-    model: 'gpt-3.5-turbo',
+    model: 'gpt-4o-mini',
     messages: chatHistory,
   });
 
