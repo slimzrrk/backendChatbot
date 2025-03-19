@@ -2,40 +2,79 @@ const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs');
 const path = require('path');
 const OpenAI = require('openai');
+const { franc } = require('franc');
+const langs = require('langs');
+const axios = require('axios');
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const transcribeAudio = async (filePath) => {
-  console.log("🔍 Fichier reçu pour conversion :", filePath);
+/**
+ * 🔍 Détecte la langue dominante d'un texte avec franc
+ */
+const detectLangFromText = (text) => {
+  const langCode = franc(text);
+  const langData = langs.where('3', langCode);
+  return langData ? langData['1'] : 'fr';
+};
 
-  const outputPath = filePath.replace(path.extname(filePath), '.wav');
-
-  // 🔁 Conversion en WAV avec FFmpeg
-  await new Promise((resolve, reject) => {
-    ffmpeg(filePath)
+/**
+ * 🎧 Convertit un fichier audio en WAV avec qualité optimisée
+ */
+const convertToWav = (inputPath) => {
+  const outputPath = inputPath.replace(path.extname(inputPath), '.wav');
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .audioFrequency(44100)
+      .audioChannels(1)
+      .audioBitrate('128k')
       .toFormat('wav')
       .on('end', () => {
-        console.log("✅ Fichier converti :", outputPath);
-        resolve();
+        console.log('✅ Conversion terminée :', outputPath);
+        resolve(outputPath);
       })
       .on('error', (err) => {
-        console.error("❌ Erreur de conversion FFmpeg :", err);
+        console.error('❌ Erreur FFmpeg :', err);
         reject(err);
       })
       .save(outputPath);
   });
+};
 
-  // 🔊 Envoi à Whisper (OpenAI)
-  const response = await openai.audio.transcriptions.create({
-    file: fs.createReadStream(outputPath),
-    model: 'whisper-1',
-    language: 'ar',
-    response_format: 'text',
+/**
+ * 🧠 Appelle le microservice Python pour clarifier le texte
+ */
+const FormData = require('form-data');
+
+const clarifyWithPython = async (wavPath) => {
+  const formData = new FormData();
+  formData.append('file', fs.createReadStream(wavPath));
+
+  const response = await axios.post('http://localhost:8002/clarify', formData, {
+    headers: formData.getHeaders(), // ← fonctionne avec `form-data` de Node.js
   });
 
-  // Optionnel : supprimer les fichiers temporaires
-  fs.unlinkSync(outputPath);
+  return response.data.text;
+};
 
-  return response;
+/**
+ * 🔁 Transcrit un audio, détecte la langue et reformule le texte
+ */
+const transcribeAudio = async (filePath) => {
+  console.log('🔍 Conversion audio...', filePath);
+  const wavPath = await convertToWav(filePath);
+
+  const clarifiedText = await clarifyWithPython(wavPath);
+  const lang = detectLangFromText(clarifiedText);
+
+  console.log('🌐 Langue détectée :', lang);
+  console.log('🧠 Texte reformulé :', clarifiedText);
+
+  fs.unlinkSync(wavPath);
+
+  return {
+    text: clarifiedText,
+    language: lang,
+  };
 };
 
 module.exports = { transcribeAudio };
