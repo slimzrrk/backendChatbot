@@ -9,6 +9,7 @@ const transcribe = async (req, res) => {
     }
 
     const transcription = await transcribeAudio(audioFile.path);
+    console.log("🧠 Texte transmis pour détection :", transcription);
     res.json({ transcription });
   } catch (error) {
     console.error('Erreur Whisper:', error);
