@@ -9,6 +9,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const db = require('./models');
+
+db.sequelize.authenticate()
+  .then(() => {
+    console.log('✅ Connexion à la base de données réussie.');
+    return db.sequelize.sync();
+  })
+  .catch(err => {
+    console.error('❌ Erreur de connexion à la base de données :', err);
+  });
+
 // Créer le dossier uploads s’il n'existe pas
 if (!fs.existsSync('./uploads')) {
     fs.mkdirSync('./uploads');
