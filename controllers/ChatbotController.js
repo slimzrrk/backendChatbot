@@ -2,6 +2,7 @@ const { getOpenAIResponse } = require('../services/openaiService');
 const { getHistory, addToHistory } = require('../services/chatMemory');
 const { detectIntent } = require('../services/intentService');
 const ChatbotService = require('../services/chatbotService');
+const db = require('../models');
 
 const askOpenAI = async (req, res) => {
   const { message, userId } = req.body;
@@ -11,22 +12,54 @@ const askOpenAI = async (req, res) => {
   }
 
   try {
-    const history = getHistory(userId);
-    const intentRaw = await detectIntent(message);
-    const intent = intentRaw.replace('نية:', '').trim().replace(/"/g, '');
+    const history = await getHistory(userId);
 
-    console.log("🎯 Intention détectée :", intent);
+    let intent = null;
+    try {
+      const intentRaw = await detectIntent(message);
+      intent = intentRaw.replace('نية:', '').trim().replace(/"/g, '');
+      console.log("🎯 Intention détectée :", intent);
+    } catch (error) {
+      console.error('❌ Erreur lors de la détection de l\'intention :', error.message);
+      intent = 'غير محدد'; // Intention par défaut si une erreur se produit
+    }
 
     const { extractEntities } = require('../services/entityExtractor');
-    const entities = extractEntities(message);
+    let entities = await extractEntities(message, userId);
     console.log("📌 Entités détectées :", entities);
+
+    if (!entities.niveau || entities.niveau === "undefined") {
+      const previousInteraction = history.slice(-5).reverse().find(h => h.niveau && h.niveau !== "undefined");
+      if (previousInteraction) {
+        entities.niveau = previousInteraction.niveau;
+      }
+    }
+
+    if (!entities.matiere || entities.matiere === "undefined") {
+      const previousInteraction = history.slice(-5).reverse().find(h => h.matiere && h.matiere !== "undefined");
+      if (previousInteraction) {
+        entities.matiere = previousInteraction.matiere;
+      }
+    }
+
+    console.log("📌 Entités après vérification de l'historique :", entities);
+
+    // ✅ Sauvegarde de l'intention et des entités dans la base de données
+    const interaction = await db.ChatbotInteraction.create({
+      user_id: userId,
+      message: message,
+      intent: intent,  // ✅ Maintenant l'intent est défini correctement
+      matiere: entities.matiere || null,
+      niveau: entities.niveau || null,
+      created_at: new Date()
+    });
 
     let extractedData = null;
     let dataSummary = null;
 
     switch (intent) {
       case 'voir_profil_prof':
-        extractedData = await ChatbotService.getTeachersWithSubjects();
+        extractedData = await ChatbotService.getTeachersWithSubjects(entities.matiere, entities.niveau);
         if (!extractedData || !Array.isArray(extractedData)) {
           dataSummary = "لم أتمكن من العثور على أي معلم حاليًا.";
         } else {
@@ -41,9 +74,8 @@ const askOpenAI = async (req, res) => {
         }
         break;
 
-
       case 'voir_cours':
-        extractedData = await ChatbotService.getDetailedWebinars();
+        extractedData = await ChatbotService.getDetailedWebinars(entities.matiere, entities.niveau);
         dataSummary = extractedData.map(w => {
           const level = w.SchoolLevel?.name || 'غير محدد';
           const subject = w.Material?.name || 'غير معروف';
@@ -53,7 +85,7 @@ const askOpenAI = async (req, res) => {
         break;
 
       case 'voir_manuels':
-        extractedData = await ChatbotService.getDetailedManuels();
+        extractedData = await ChatbotService.getDetailedManuels(entities.matiere, entities.niveau);
         dataSummary = extractedData.map(m => {
           const subject = m.Material?.name || 'غير معروف';
           return `📘 ${m.name} — مادة: ${subject}`;
@@ -61,7 +93,7 @@ const askOpenAI = async (req, res) => {
         break;
 
       case 'voir_quizz':
-        extractedData = await ChatbotService.getQuizzesWithWebinars();
+        extractedData = await ChatbotService.getQuizzesWithWebinars(entities.matiere, entities.niveau);
         dataSummary = extractedData.map(q => {
           const subject = q.Webinar?.Material?.name || 'غير معروف';
           const webinar = q.Webinar?.slug || 'غير معروف';
@@ -70,18 +102,13 @@ const askOpenAI = async (req, res) => {
         break;
 
       case 'voir_exercices':
-        extractedData = await ChatbotService.getDocumentsByManuel();
+        extractedData = await ChatbotService.getDocumentsByManuel(entities.matiere, entities.niveau);
         dataSummary = extractedData.map(d => `📄 ${d.name} — من كتاب: ${d.Manuel?.name}`).join('\n');
         break;
 
       case 'voir_meets':
-        extractedData = await ChatbotService.getLiveMeetings();
+        extractedData = await ChatbotService.getLiveMeetings(entities.matiere, entities.niveau);
         dataSummary = extractedData.map(m => `📺 لقاء مباشر مع: ${m.teacher?.full_name}`).join('\n');
-        break;
-
-      case 'abonnement_prof':
-        extractedData = await ChatbotService.getTeachersWithFollowers();
-        dataSummary = extractedData.map(t => `📌 ${t.full_name} — عدد المتابعين: ${t.Follows.length}`).join('\n');
         break;
 
       case 'aide':
@@ -90,8 +117,7 @@ const askOpenAI = async (req, res) => {
       case 'ignorer_contenu':
       case 'autre':
         const simpleReply = ChatbotService.handleSimpleIntent(intent);
-        addToHistory(userId, 'user', message);
-        addToHistory(userId, 'assistant', simpleReply);
+        await interaction.update({ response: simpleReply });
         return res.json({ reply: simpleReply });
 
       default:
@@ -104,8 +130,7 @@ const askOpenAI = async (req, res) => {
 
     const reply = await getOpenAIResponse(userId, prompt, history);
 
-    addToHistory(userId, 'user', message);
-    addToHistory(userId, 'assistant', reply);
+    await interaction.update({ response: reply });
 
     res.json({ reply });
 

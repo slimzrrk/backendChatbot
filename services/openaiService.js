@@ -7,7 +7,7 @@ const openai = new OpenAI({
 /**
  * Envoie le message à GPT avec tout l'historique de la conversation
  * @param {string} userId - Identifiant unique de l’utilisateur
- * @param {string} message - Message actuel de l’utilisateur
+ * @param {string} prompt - Prompt complet à envoyer à l'API
  * @param {Array} chatHistory - Historique complet (array de { role, content })
  * @returns {string} - Réponse générée par GPT
  */
@@ -16,11 +16,14 @@ const getOpenAIResponse = async (userId, message, chatHistory) => {
   // ✅ Si l'historique est vide ou non fourni, on initialise un tableau vide
   chatHistory = chatHistory || [];
 
+  // ✅ Filtrage de l'historique pour ne conserver que les messages valides
+  const validHistory = chatHistory.filter(msg => msg.role && ['system', 'user', 'assistant'].includes(msg.role));
+
   // ✅ Ajoute un message système si ce n'est pas déjà fait
-  if (!chatHistory.some(msg => msg.role === 'system')) {
-    chatHistory.unshift({
+  if (!validHistory.some(msg => msg.role === 'system')) {
+    validHistory.unshift({
       role: 'system',
-      content:`أنت مساعد ذكي للأطفال على منصة التعليم الابتدائي التونسية Abajim.com (أبجـيم). مهمتك هي مساعدة الأطفال في استخدام المنصة، فهم محتوياتها، وتوجيههم في رحلتهم التعليمية.
+      content: `أنت مساعد ذكي للأطفال على منصة التعليم الابتدائي التونسية Abajim.com (أبجـيم). مهمتك هي مساعدة الأطفال في استخدام المنصة، فهم محتوياتها، وتوجيههم في رحلتهم التعليمية.
 
 # أسلوب الإجابة
 
@@ -49,24 +52,31 @@ const getOpenAIResponse = async (userId, message, chatHistory) => {
 # ملاحظات
 
 - تأكد من أن الردود تهدف دائمًا إلى تعزيز الفضول الطبيعي للطفل وحثه على الاستمرار في استكشاف وتعلم المزيد.
-- تذكر أن تكون صبورًا وتدعم الطفل في اكتشاف الأخطاء وتعلم من خلالها.`,
+- تذكر أن تكون صبورًا وتدعم الطفل في اكتشاف الأخطاء وتعلم من خلالها.`
     });
   }
 
-  // Ajoute le message utilisateur à l'historique
-  chatHistory.push({ role: 'user', content: message });
+  // ✅ Ajouter le message de l'utilisateur à l'historique
+  validHistory.push({ role: 'user', content: message });
 
-  const chatCompletion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: chatHistory,
-  });
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: validHistory,
+      temperature: 0.7,
+      max_tokens: 500,
+    });
 
-  const reply = chatCompletion.choices[0].message.content;
+    const reply = response.choices[0].message.content;
 
-  // Ajoute la réponse de l’IA à l’historique
-  chatHistory.push({ role: 'assistant', content: reply });
+    // ✅ Ajouter la réponse de l'assistant à l'historique
+    validHistory.push({ role: 'assistant', content: reply });
 
-  return reply;
+    return reply;
+  } catch (error) {
+    console.error('❌ Erreur dans askOpenAI:', error.response?.data || error.message);
+    throw new Error('Erreur lors de la communication avec OpenAI');
+  }
 };
 
 module.exports = { getOpenAIResponse };

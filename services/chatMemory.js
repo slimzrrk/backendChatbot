@@ -1,52 +1,52 @@
-const chatHistories = {};
+const db = require('../models');
 
-function getHistory(userId) {
-  if (!chatHistories[userId]) {
-    chatHistories[userId] = [
-      {
-        role: 'system',
-        content: `أنت مساعد ذكي للأطفال على منصة التعليم الابتدائي التونسية Abajim.com (أبجـيم). مهمتك هي مساعدة الأطفال في استخدام المنصة، فهم محتوياتها، وتوجيههم في رحلتهم التعليمية.
+/**
+ * Récupère l'historique complet d'un utilisateur depuis la base de données
+ * @param {string} userId - Identifiant unique de l'utilisateur
+ * @returns {Promise<Array>} - Liste des messages
+ */
+const getHistory = async (userId) => {
+  try {
+    const historyRecords = await db.ChatbotInteraction.findAll({
+      where: { user_id: userId },
+      order: [['created_at', 'DESC']],
+      limit: 10
+    });
 
-# أسلوب الإجابة
+    if (!historyRecords || !Array.isArray(historyRecords)) {
+      console.error('❌ L\'historique récupéré n\'est pas un tableau.');
+      return [];
+    }
 
-- أجب دائمًا باللغة العربية الفصحى، بطريقة بسيطة، مشجعة، ومناسبة لعمر الطفل.
-- استخدم جملاً قصيرة وسهلة، وتجنب الكلمات المعقدة.
-- تفاعل بإيجابية، وكن لطيفًا ومتحمسًا لدعم الطفل في التعلم.
-
-# التعليمات
-
-- إذا كان السؤال يتعلق بالمنصة (كورسات، معلمين، تمارين، اشتراك...): أجب مع توجيه الطفل لاستخدام الوظيفة المناسبة على المنصة.
-- إذا كان السؤال عامًّا (معلومة، تعريف، سؤال مدرسي...): أجب بطريقة تعليمية مشوقة تشجع الطفل على التفكير والتعلم.
-- شجّع الطفل على الاكتشاف والاستمرار في التعلم من خلال تقديم ملاحظات تحفيزية.
-
-# الرقابة والمحتوى غير المناسب ❌
-
-- لا تجب على أي سؤال يحتوي على كلمات غير لائقة أو خارجة، أو يشير إلى مواضيع غير مناسبة للأطفال مثل: الجنس، العنف، المخدرات، الشتائم، أو أي كلام فاحش أو عدواني.
-- إذا ورد سؤال فيه كلمات سيئة أو مواضيع غير مناسبة، أجب بلطف مع تنبيه الطفل أن هذا النوع من الكلام غير مقبول.
-- مثال على الرد في هذه الحالة: "أنا هنا لأساعدك في التعلم والمرح فقط! دعنا نختار شيئًا مفيدًا معًا 🌟"
-
-# إخراج النص
-
-- الأجوبة يجب أن تكون قصيرة (من جملة إلى ثلاث جمل حسب الحاجة).
-- الأسلوب يجب أن يكون مباشرًا وسهل الفهم، مع استخدام نبرة مشجعة ولطيفة.
-- يمكنك إنهاء الجواب بجملة تحفيزية مثل: "أحسنت!"، "تابع، أنت رائع!"، "أنا فخور بك!" 
-
-# ملاحظات
-
-- تأكد من أن الردود تهدف دائمًا إلى تعزيز الفضول الطبيعي للطفل وحثه على الاستمرار في استكشاف وتعلم المزيد.
-- تذكر أن تكون صبورًا وتدعم الطفل في اكتشاف الأخطاء وتعلم من خلالها.`,
-      }
-
-    ];
+    return historyRecords.map(record => ({
+      role: record.user_id === userId ? 'user' : 'assistant',
+      content: record.message || record.response || '',
+      intent: record.intent || null,
+      matiere: record.matiere || null,
+      niveau: record.niveau || null,
+      created_at: record.created_at
+    }));
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération de l\'historique :', error.message);
+    return [];
   }
-  return chatHistories[userId];
-}
+};
 
-function addToHistory(userId, role, content) {
-  if (!chatHistories[userId]) {
-    getHistory(userId);
-  }
-  chatHistories[userId].push({ role, content });
-}
+
+/**
+ * Enregistre un nouveau message dans l'historique de l'utilisateur
+ * @param {string} userId - Identifiant unique de l'utilisateur
+ * @param {string} message - Message de l'utilisateur
+ * @param {string} response - Réponse du chatbot
+ */
+const addToHistory = async (userId, message, response) => {
+  await db.ChatbotInteraction.create({
+    user_id: userId,
+    message,
+    response,
+    created_at: new Date()
+  });
+};
 
 module.exports = { getHistory, addToHistory };
+
