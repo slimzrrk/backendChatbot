@@ -128,7 +128,11 @@ const askOpenAI = async (req, res) => {
       ? `${message}\n\n🔎 إليك المعلومات المستخرجة من قاعدة البيانات:\n${dataSummary}\n\n📌 الرجاء صياغتها كجواب مشجع ومفهوم لطفل باللغة العربية الفصحى.`
       : message;
 
-    const reply = await getOpenAIResponse(userId, prompt, history);
+      const reply = await getOpenAIResponse(userId, prompt, history, {
+        intent,
+        matiere: entities.matiere,
+        niveau: entities.niveau
+      });
 
     await interaction.update({ response: reply });
 

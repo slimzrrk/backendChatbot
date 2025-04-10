@@ -7,23 +7,20 @@ const openai = new OpenAI({
 /**
  * Envoie le message à GPT avec tout l'historique de la conversation
  * @param {string} userId - Identifiant unique de l’utilisateur
- * @param {string} prompt - Prompt complet à envoyer à l'API
- * @param {Array} chatHistory - Historique complet (array de { role, content })
+ * @param {string} message - Message complet de l'utilisateur
+ * @param {Array} chatHistory - Historique de conversation [{role, content, matiere, niveau, intent}]
+ * @param {Object} context - Contexte extrait (intent, matiere, niveau)
  * @returns {string} - Réponse générée par GPT
  */
 
-const getOpenAIResponse = async (userId, message, chatHistory) => {
-  // ✅ Si l'historique est vide ou non fourni, on initialise un tableau vide
+const getOpenAIResponse = async (userId, message, chatHistory, context = {}) => {
   chatHistory = chatHistory || [];
-
-  // ✅ Filtrage de l'historique pour ne conserver que les messages valides
   const validHistory = chatHistory.filter(msg => msg.role && ['system', 'user', 'assistant'].includes(msg.role));
 
-  // ✅ Ajoute un message système si ce n'est pas déjà fait
-  if (!validHistory.some(msg => msg.role === 'system')) {
-    validHistory.unshift({
-      role: 'system',
-      content: `أنت مساعد ذكي للأطفال على منصة التعليم الابتدائي التونسية Abajim.com (أبجـيم). مهمتك هي مساعدة الأطفال في استخدام المنصة، فهم محتوياتها، وتوجيههم في رحلتهم التعليمية.
+  // 🧠 Prompt système principal (instruction de comportement)
+  const systemPrompt = {
+    role: 'system',
+    content: `أنت مساعد ذكي للأطفال على منصة التعليم الابتدائي التونسية Abajim.com (أبجـيم). مهمتك هي مساعدة الأطفال في استخدام المنصة، فهم محتوياتها، وتوجيههم في رحلتهم التعليمية.
 
 # أسلوب الإجابة
 
@@ -53,25 +50,28 @@ const getOpenAIResponse = async (userId, message, chatHistory) => {
 
 - تأكد من أن الردود تهدف دائمًا إلى تعزيز الفضول الطبيعي للطفل وحثه على الاستمرار في استكشاف وتعلم المزيد.
 - تذكر أن تكون صبورًا وتدعم الطفل في اكتشاف الأخطاء وتعلم من خلالها.`
-    });
-  }
+  };
 
-  // ✅ Ajouter le message de l'utilisateur à l'historique
-  validHistory.push({ role: 'user', content: message });
+  // 🧩 Prompt secondaire injecté dynamiquement pour guider GPT
+  const { intent, matiere, niveau } = context;
+  const contextualPrompt = {
+    role: 'system',
+    content: `🎯 نية الطفل: ${intent || 'غير محددة'}\n📚 المادة: ${matiere || 'غير محددة'}\n🎓 المستوى: ${niveau || 'غير محدد'}\n📝 الرجاء الإجابة بناءً على هذه المعلومات.`
+  };
+
+  // ⚙️ Construction du message final
+  const messages = [systemPrompt, contextualPrompt, ...validHistory];
+  messages.push({ role: 'user', content: message });
 
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      messages: validHistory,
+      messages,
       temperature: 0.7,
       max_tokens: 500,
     });
 
     const reply = response.choices[0].message.content;
-
-    // ✅ Ajouter la réponse de l'assistant à l'historique
-    validHistory.push({ role: 'assistant', content: reply });
-
     return reply;
   } catch (error) {
     console.error('❌ Erreur dans askOpenAI:', error.response?.data || error.message);
